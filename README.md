@@ -19,6 +19,8 @@ This repository is dedicated to documenting my learning journey with Actix, a po
     - [Creating a simple *hello world!*](#creating-a-simple-hello-world)
     - [Simple web-server, that Serves HTML contents](#simple-web-server-that-serves-html-contents)
     - [Writing an Application:](#writing-an-application)
+      - [State:](#state)
+      - [Shared Mutable State:](#shared-mutable-state)
 
 
 
@@ -190,5 +192,122 @@ App::new().service(
 
 
 ### Writing an Application: 
+
+#### State:
+
+* Application state is shared with all routes and responses with the same scope. State can be accessed with the `web::Data<T>` extractor where `T` is the type of the state. State is also assessable for middleware.
+
+* Example below, application stores the application name in the state:
+```rust
+use actix_web::{get, web, App, HttpServer};
+
+// This struct represents state
+struct AppState {
+    app_name: String,
+}
+
+#[get("/")]
+async fn index(data: web::Data<AppState>) -> String {
+    let app_name = &data.app_name; // <- get app_name
+    format!("Hello {app_name}!") // <- response with app_name
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        App::new()
+            .app_data(web::Data::new(AppState {
+                app_name: String::from("Actix Web"),
+            }))
+            .service(index)
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
+```
+* Defining a struct `AppState` representing the state of the application, which is this case contains a single field `app_name` of type `String`.
+
+```rust
+// This struct represents state
+struct AppState {
+    app_name: String,
+}
+```
+
+* Defines an asynchronous function `index` which serves as a request handler for the root path `("/")`. It takes a parameter `data` of type `web::Data<AppState>` which represents the application state. It extracts the `app_name` field from the application state and returns a string response containing the app name.
+
+```rust
+#[get("/")]
+async fn index(data: web::Data<AppState>) -> String {
+    let app_name = &data.app_name; // <- get app_name
+    format!("Hello {app_name}!") // <- response with app_name
+}
+```
+* Then we have the `main()` function logic.
+
+
+#### Shared Mutable State:
+
+* The shared resources can be mutable in nature, example of the codebase:
+
+```rust
+use actix_web::{web, App, HttpServer};
+use std::sync::Mutex;
+
+struct AppStateWithCounter {
+    counter: Mutex<i32>, // <- Mutex is necessary to mutate safely across threads
+}
+
+async fn index(data: web::Data<AppStateWithCounter>) -> String {
+    let mut counter = data.counter.lock().unwrap(); // <- get counter's MutexGuard
+    *counter += 1; // <- access counter inside MutexGuard
+
+    format!("Request number: {counter}") // <- response with count
+}
+
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // Note: web::Data created _outside_ HttpServer::new closure
+    let counter = web::Data::new(AppStateWithCounter {
+        counter: Mutex::new(0),
+    });
+
+    HttpServer::new(move || {
+        // move counter into the closure
+        App::new()
+            .app_data(counter.clone()) // <- register the created data
+            .route("/", web::get().to(index))
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
+```
+* We have imported the `use std::sync::Mutex;`, mutexes in this module implement a strategy called `poisoning` where a mutex is considered poisoned wherever a thread panics while holding the mutex. Once mutex is poisoned, all other threads are unable to access the data by default as it is likely trained(some invariant is not being upheld).
+* In simple word, `Mutex` is used for synchronization.
+
+```rust
+struct AppStateWithCounter {
+    counter: Mutex<i32>,    // mutes is necessary to mutate safely across thread
+}
+```
+* Defines a struct `AppStateWithCounter` that holds a counter wrapped in a `Mutex`. This structure will be used to store application state.
+
+```rust
+async fn index(data: web::Data<AppStateWithCounter>) -> String {
+    let mut counter = data.counter.lock().unwrap(); // <- get counter's MutexGuard
+    *counter += 1; // <- access counter inside MutexGuard
+
+    format!("Request number: {counter}") // <- response with count
+}
+```
+
+* Defines an async function `index` that takes `web::Data<AppStateWithCounter>` as input. This function implements the counter inside the `AppStateWithCounter` and returns a string indicating the request number.
+
+* Lastly, we have main function is marked with `#[actix_web::main]`, which is procedural macro provided by actix web for bootstrapping the async runtime. It creates an `HttpServer` instance and binds it to the address `127.0.0.1:8080`.
+
+ 
 
 
