@@ -17,6 +17,7 @@ This repository is dedicated to documenting my learning journey with Actix, a po
   - [Features](#features)
   - [Walkthrough](#walkthrough)
     - [Creating a simple *hello world!*](#creating-a-simple-hello-world)
+    - [Simple web-server, that Serves HTML contents](#simple-web-server-that-serves-html-contents)
     - [Writing an Application:](#writing-an-application)
 
 
@@ -99,4 +100,95 @@ async fn main() -> std::io::Result<()> {
 * App is started inside an `HttpServer` which will serve incoming requests using your `App` as an "application factory".
 * The `#[actix_web::main]` macro executes the async main function within the actix runtime. 
 
+### Simple web-server, that Serves HTML contents 
+
+* This code is a simple web server written in Rust using the Actix-web framework.
+
+* This code creates a simple web server that serves the content of ***index.html*** file when accessed via the URL `http://localhost:8080/app/index.html`.
+
+```rust
+use actix_web::{web, App, HttpResponse, HttpServer};
+use std::fs;
+
+
+async fn index() -> HttpResponse {
+    let html_content = fs::read_to_string("index.html")
+        .expect("Unable to read file");
+
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(html_content)
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        App::new().service(
+            // prefixes all resources and routes attached to it...
+            web::scope("/app")
+                // ...so this handles requests for `GET /app/index.html`
+                .route("/index.html", web::get().to(index)),
+        )
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
+```
+
+* The code begin with importing necessary items from the `actix_web` and `std::fs` modules.
+
+```rust
+use actix_web::{web, App, HttpResponse, HttpServer};
+use std::fs;
+```
+
+* Next, there is an asynchronous function named `index()` that serves the content of an HTML file named `index.html` when accessed via a web browser.
+
+```rust
+async fn index() -> HttpResponse {
+    let html_content = fs::read_to_string("index.html")
+        .expect("Unable to read file");
+
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(html_content)
+}
+```
+* Inside the `main()` function, as `HttpServer` is created with a closure that configures the server. It bind the server to the address `127.0.0.1` (localhost) on port `8080`.
+
+```rust
+HttpServer::new(|| {
+    App::new().service(
+        // prefixes all resources and routes attached to it...
+        web::scope("/app")
+            // ...so this handles requests for `GET /app/index.html`
+            .route("/index.html", web::get().to(index)),
+    )
+})
+.bind(("127.0.0.1", 8080))?
+```
+* The closure passed to `HttpServer::new()` creates an `App` instance which defines the application's routes. In this case, it sets up the route for `GET /app/index.html` to serve the `index()` function.
+
+```rust
+App::new().service(
+    // prefixes all resources and routes attached to it...
+    web::scope("/app")
+        // ...so this handles requests for `GET /app/index.html`
+        .route("/index.html", web::get().to(index)),
+)
+```
+
+* Finally, the server is started by calling `.run().await()` method, which starts the server and awaits its completion.
+
+```rust
+.run()
+.await()
+```
+
+* On browser, when we go to path `http://localhost:8080/app/index.html` we can access the contents of `index.html`
+
+
 ### Writing an Application: 
+
+
