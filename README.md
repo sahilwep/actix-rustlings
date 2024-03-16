@@ -23,6 +23,7 @@ This repository is dedicated to documenting my learning journey with Actix, a po
       - [Shared Mutable State:](#shared-mutable-state)
       - [Application guards and virtual hosting](#application-guards-and-virtual-hosting)
       - [Configure](#configure)
+    - [The HTTP Server](#the-http-server)
 
 
 
@@ -392,5 +393,28 @@ async fn main() -> std::io::Result<()> {
 /app       ->    "app"
 /api/test  ->    "test"
 ```
+
+### The HTTP Server
+
+* The `HttpServer` type is responsible for serving HTTP requests.
+
+* `HttpServer` accepts an application factory as a parameter, and the application factory must have Send + Sync boundaries. More about that in the multi-threading section.
+
+* To start the web server it must first be bound to a network socket. Use `HttpServer::bind()` with a socket address tuple or string such as `("127.0.0.1", 8080)` or `"0.0.0.0:8080"`. This will fail if the socket is being used by another application.
+
+* After the `bind` is successful, use `HttpServer::run()` to return a Server instance. The Server must be `await`ed or `spawn`ed to start processing requests and will run until it receives a shutdown signal (such as, by default, a `ctrl-c`; read more here).
+
+```rust
+use actix_web::{web, App, HttpResponse, HttpServer};
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| App::new().route("/", web::get().to(HttpResponse::Ok)))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
+}
+```
+
 
 
