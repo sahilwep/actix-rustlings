@@ -24,6 +24,7 @@ This repository is dedicated to documenting my learning journey with Actix, a po
       - [Application guards and virtual hosting](#application-guards-and-virtual-hosting)
       - [Configure](#configure)
     - [The HTTP Server](#the-http-server)
+      - [Multi-Threading](#multi-threading)
 
 
 
@@ -417,4 +418,33 @@ async fn main() -> std::io::Result<()> {
 ```
 
 
+#### Multi-Threading
+
+* `HttpServer` automatically start a number of HTTP *worker*, by default this number is equal to the number of physical CPU in the system. This number can be overridden with the `HttpServer::workers()` method.
+
+```rust
+use actix_web::{web, App, HttpResponse, HttpServer};
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| App::new().route("/", web::get().to(HttpResponse::Ok))).workers(4)
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
+}
+```
+* Once the workers are created, they each receive a separate *application* instance to handle requests. Application state is not shared between the thread, and handlers are free to manipulate their copy of the state with no concurrency concerns.
+* Application state does not need to be `Send` or `Sync`, but application factories must be `Send` + `Sync`.
+* To share state between worker thread, use an `Arc`/`Data`. Special care should be take once sharing and synchronization are introduced. In many cases, performance costs are inadvertenly introduced as a result of locking occurs at all.
+
+* Since each worker thread processes its requests sequentially, handlers which block the current thread will cause the current worker to stop processing new requests:
+
+```rust
+
+fn my_handler() -> impl Responder {
+    std::thread::sleep(Duration::from_secs(5));     //  <-- Bad practice! will cause the current worker thread to hang!
+    "response"
+}
+```
+* The same limitation applies to extractors as well. When a handler function receives an argument which implements `FromRequest`, and that implementation block the current thread, the worker thread will block when running the handler. Special attention must be given when implementing extractors for this very reason, and they should also be implemented asynchronously where needed.
 
