@@ -25,6 +25,7 @@ This repository is dedicated to documenting my learning journey with Actix, a po
       - [Configure](#configure)
     - [The HTTP Server](#the-http-server)
       - [Multi-Threading](#multi-threading)
+      - [TLS/HTTPS](#tlshttps)
 
 
 
@@ -448,3 +449,56 @@ fn my_handler() -> impl Responder {
 ```
 * The same limitation applies to extractors as well. When a handler function receives an argument which implements `FromRequest`, and that implementation block the current thread, the worker thread will block when running the handler. Special attention must be given when implementing extractors for this very reason, and they should also be implemented asynchronously where needed.
 
+
+#### TLS/HTTPS
+
+* Actix Web supports two TLS implementations out-of-the-box: `rustls` and `openssl`
+
+* The `rustls` crate feature is for `rustls` integrations and `openssl` is for `openssl`  integration.
+
+> Cargo.toml
+```toml
+[dependencies]
+actix-web = { version = "4", features = ["openssl"] }
+openssl = { version = "0.10" }
+```
+
+```rust
+use actix_web::{get, App, HttpRequest, HttpServer, Responder};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+
+#[get("/")]
+async fn index(_req: HttpRequest) -> impl Responder {
+    "Welcome!"
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // load TLS keys
+    // to create a self-signed temporary cert for testing:
+    // `openssl req -x509 -newkey rsa:4096 -nodes -keyout key.pem -out cert.pem -days 365 -subj '/CN=localhost'`
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder
+        .set_private_key_file("key.pem", SslFiletype::PEM)
+        .unwrap();
+    builder.set_certificate_chain_file("cert.pem").unwrap();
+
+    HttpServer::new(|| App::new().service(index))
+        .bind_openssl("127.0.0.1:8080", builder)?
+        .run()
+        .await
+}
+```
+
+* To create the `key.pem` and `cert.pem` use the command. **Fill in your own subject**
+
+```sh
+$ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \
+  -days 365 -sha256 -subj "/C=CN/ST=Fujian/L=Xiamen/O=TVlinux/OU=Org/CN=muro.lxd"
+```
+
+* To remove the password, then copy `nopass.pem` to `key.pem`
+
+```sh
+$ openssl rsa -in key.pem -out nopass.pem
+```
