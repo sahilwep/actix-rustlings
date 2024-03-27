@@ -28,6 +28,8 @@ This repository is dedicated to documenting my learning journey with Actix, a po
       - [TLS/HTTPS](#tlshttps)
       - [Keep-Alive](#keep-alive)
       - [Graceful Shutdown](#graceful-shutdown)
+    - [Type-Safe Information Extraction:](#type-safe-information-extraction)
+      - [Path:](#path)
 
 
 
@@ -560,3 +562,97 @@ async fn index(_req: HttpRequest) -> HttpResponse {
   * *SIGQUIT* - Force shutdown workers
 * It is possible to disable signal handling with `HttpServer::disable_signals()` method.
 
+
+### Type-Safe Information Extraction:
+
+* Actix web provides facility for type-safe request information access called extractors (i.e, `implFromRequest').
+* An extractor can be accessed as an argument to handler function. Actix Web supports up to 12 extractors per handler function. Arguments position does not matter.
+
+```rust
+async fn index(path: web::Path<(String, String)>, json: web::Json<MyInfo>) -> impl Responder {
+    let path = path.into_inner();
+    format!("{} {} {} {}", path.0, path.1, json.id, json.username)
+}
+```
+
+#### Path: 
+
+* Path provides information that is extracted from the request's path. Parts of the path that are extractable called "dynamic segments" and are marked with curly braces. You can deserialize any variable segment from the path.
+
+* For instance, for resource that registered for the `/user/{user_id}/{friend}` path, two segments could be deserialized, `user_id` and `friend`. These segments could be extracted as a tuple in the order they are declared (eg, `Path<(u32, String)>).
+
+```rust
+use actix_web::{get, web, App, HttpServer, Responder, Result};
+
+// extract path info from "/user/{user_id}/{friend}" url
+// {user_id} - deserializes to a u32
+// {friend_id} - deserializes to String
+#[get("/user/{user_id}/{friend}")]  //  <- define path parameter
+async fn index(path: web::Path<(u32, String)>) -> Result<String> {
+    let (user_id, friend) = path.into_inner();
+    Ok(format!("Welcome {}, user_id {}", friend, user_id))
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(move || {
+        App::new()
+            .service(index)      // impl for custom type_safe extractor
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
+```
+* It is possible to extract path information to a type that implements to a type that implements to `Deserialize` trait from `serde` by matching dynamic segment names with field names. Here is an equivalent example that uses a deserialization struct using `serde` (make sure to enable it's `derive` feature) instead of a tuple type.
+
+```rust
+use actix_web::{get, web, Result};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Info {
+    user_id: u32,
+    friend: String,
+}
+
+/// extract path info using serde
+#[get("/users/{user_id}/{friend}")] // <- define path parameters
+async fn index(info: web::Path<Info>) -> Result<String> {
+    Ok(format!(
+        "Welcome {}, user_id {}!",
+        info.friend, info.user_id
+    ))
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    use actix_web::{App, HttpServer};
+
+    HttpServer::new(|| App::new().service(index))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
+}
+```
+* As a non-type-safe alternative, it's also possible to query the request for path parameter by name within a handler:
+
+```rust
+#[get("/users/{user_id}/{friend}")] // <- define path parameters
+async fn index(req: HttpRequest) -> Result<String> {
+    let name: String = req.match_info().get("friend").unwrap().parse().unwrap();
+    let userid: i32 = req.match_info().query("user_id").parse().unwrap();
+
+    Ok(format!("Welcome {}, user_id {}!", name, userid))
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    use actix_web::{App, HttpServer};
+
+    HttpServer::new(|| App::new().service(index))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
+}
+```
