@@ -30,6 +30,7 @@ This repository is dedicated to documenting my learning journey with Actix, a po
       - [Graceful Shutdown](#graceful-shutdown)
     - [Type-Safe Information Extraction:](#type-safe-information-extraction)
       - [Path:](#path)
+      - [Query:](#query)
 
 
 
@@ -656,3 +657,26 @@ async fn main() -> std::io::Result<()> {
         .await
 }
 ```
+
+#### Query: 
+
+* The `Query<T>` type provides extraction functionality for the request's query parameters. Underneath it uses `serde_urlencoded` crate.
+
+```rust
+use actix_web::{get, web, App, HttpServer};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Info {
+    username: String,
+}
+
+// this handler gets called if the query deserializes into `Info` successfully
+// otherwise a 400 Bad Request error response is returned
+#[get("/")]
+async fn index(info: web::Query<Info>) -> String {
+    format!("Welcome {}!", info.username)
+}
+```
+
+
